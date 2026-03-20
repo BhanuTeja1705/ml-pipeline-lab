@@ -4,50 +4,25 @@ name: ML Training CI Pipeline
 
 on:
   push:
-    paths: ['src/**','data/**','configs/**']   # trigger pipeline only when src, data, or config files change
+    paths:
+      - 'src/**'
+      - 'data/**'
+      - 'configs/**'
 
   schedule:
-    - cron: '0 2 * * *'   # run automatically every day at 02:00 UTC
+    - cron: '0 2 * * *'
 
   workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.10'
-  MODEL_VERSION: ${{ github.sha }}   # use git commit SHA as model version (unique versioning)
+  MODEL_VERSION: ${{ github.sha }}
 
 jobs:
 
   train:
     name: Train Model
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4   # checkout repository code
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'   # cache dependencies for faster builds
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt   # install required Python packages
-
-      - name: Run training
-        run: python train.py   # execute training pipeline
-        env:
-          MODEL_VERSION: ${{ env.MODEL_VERSION }}
-
-      - name: Upload model artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-${{ github.sha }}   # unique model name using commit SHA
-          path: model.pkl                # upload trained model file
-          retention-days: 30             # store artifact for 30 days
-
-
-  validate:
-    name: Validate Model
-    runs-on: ubuntu-latest
-    needs: train   # ensures validation runs only after training job completes
     steps:
       - uses: actions/checkout@v4
 
@@ -57,26 +32,60 @@ jobs:
           cache: 'pip'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt   # install dependencies again for validation job
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run training
+        run: |
+          python train.py
+        env:
+          MODEL_VERSION: ${{ env.MODEL_VERSION }}
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ github.sha }}
+          path: model.pkl
+          retention-days: 30
+
+
+  validate:
+    name: Validate Model
+    runs-on: ubuntu-latest
+    needs: train
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
 
       - uses: actions/download-artifact@v4
         with:
-          name: model-${{ github.sha }}   # download trained model from previous job
+          name: model-${{ github.sha }}
 
       - name: Run validation gates
-        run: python validate.py   # run validation checks (accuracy, fairness, etc.)
+        run: |
+          python validate.py
 
 
   register:
     name: Register Model
     runs-on: ubuntu-latest
-    needs: validate   # run only after validation succeeds
-    if: github.ref == 'refs/heads/main'   # execute only on main branch
+    needs: validate
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
 
       - name: Register model
-        run: python -c "print('Registered: iris_classifier @ Staging')"   # simulate model registration
+        run: |
+          python -c "print('Registered: iris_classifier @ Staging')"
